@@ -3,6 +3,9 @@ Async REST API Backend for A2 TV App.
 Powered by aiohttp.web with CORS support and JSON endpoints.
 """
 
+import os
+import sys
+import time
 import json
 from aiohttp import web
 from config import API_HOST, API_PORT, APP_PACKAGE, CURRENT_APP_VERSION_CODE
@@ -31,39 +34,26 @@ async def cors_middleware(request, handler):
 
 DEFAULT_MAINTENANCE_MSG = "التطبيق تحت الصيانة حالياً، نعمل على تحسين تجربتك. يرجى المحاولة لاحقاً"
 
-PROTECTED_ENDPOINTS = {
-    "/api/channels",
-    "/api/categories",
-    "/api/channel-apis"
-}
+# Endpoints that are always open and NEVER blocked by maintenance
+PROTECTED_ENDPOINTS = set()
 
 @web.middleware
 async def maintenance_middleware(request, handler):
-    path = request.path.rstrip("/")
-    if path in PROTECTED_ENDPOINTS:
-        m = db.get_maintenance()
-        if m.get("enabled", False):
-            # Check for admin authentication bypass
-            auth = request.headers.get("Authorization", "")
-            admin_key = request.headers.get("X-Admin-Key", "")
-            query_token = request.query.get("token", "")
-            from config import SECRET_KEY
-            is_admin = (auth and (SECRET_KEY in auth)) or (admin_key == SECRET_KEY) or (query_token == SECRET_KEY)
-            if not is_admin:
-                msg = m.get("message") or DEFAULT_MAINTENANCE_MSG
-                return json_ar({
-                    "status": "maintenance",
-                    "maintenance": True,
-                    "message": msg,
-                    "updated_at": m.get("updated_at", "")
-                }, status=503)
-
+    # Public API endpoints (/api/categories, /api/channels, /api/app-config) are always accessible
     return await handler(request)
 
 def json_ar(data, status=200):
     return web.json_response(data, status=status, dumps=lambda obj: json.dumps(obj, ensure_ascii=False))
 
 # Routes Handlers
+async def handle_health(request):
+    return json_ar({
+        "status": "ok",
+        "healthy": True,
+        "service": "A2 TV API & Bot",
+        "timestamp": int(time.time())
+    })
+
 async def handle_root(request):
     return json_ar({
         "status": "online",
@@ -71,6 +61,7 @@ async def handle_root(request):
         "version": "2.0.0",
         "package": APP_PACKAGE,
         "endpoints": {
+            "health": "/health",
             "app_config": "/api/app-config",
             "channels": "/api/channels",
             "categories": "/api/categories",
@@ -490,6 +481,9 @@ async def handle_admin_stats(request):
 def make_app():
     app = web.Application(middlewares=[cors_middleware, maintenance_middleware])
     app.router.add_get("/", handle_root)
+    app.router.add_get("/health", handle_health)
+    app.router.add_get("/health/", handle_health)
+    app.router.add_get("/ping", handle_health)
     app.router.add_get("/api/app-config", handle_app_config)
     app.router.add_get("/api/app-config/", handle_app_config)
     app.router.add_get("/api/config", handle_app_config)
@@ -553,9 +547,21 @@ def make_app():
 
     return app
 
-def run_server(host=API_HOST, port=API_PORT, handle_signals=False):
+def run_server(host=None, port=None, handle_signals=True):
+    actual_host = host or os.environ.get("API_HOST", "0.0.0.0")
+    raw_port = os.environ.get("PORT") or os.environ.get("API_PORT") or port or API_PORT or 8080
+    actual_port = int(raw_port)
+    print(f"🚀 [A2TV] Starting REST API Web Server on http://{actual_host}:{actual_port} ...")
     app = make_app()
-    web.run_app(app, host=host, port=port, handle_signals=handle_signals, print=print)
+    web.run_app(app, host=actual_host, port=actual_port, handle_signals=handle_signals, print=print)
 
 if __name__ == "__main__":
+    import threading
+    try:
+        from bot import run_bot
+        bot_thread = threading.Thread(target=run_bot, name="TelegramBotThread", daemon=True)
+        bot_thread.start()
+        print("🤖 [A2TV] Telegram Bot started in background thread")
+    except Exception as e:
+        print(f"⚠️ [A2TV] Failed to start bot in background: {e}")
     run_server(handle_signals=True)

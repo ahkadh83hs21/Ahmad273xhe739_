@@ -1034,4 +1034,12 @@ def start_bot_polling():
 run_bot = start_bot_polling
 
 if __name__ == "__main__":
+    import threading
+    try:
+        from server import run_server
+        server_thread = threading.Thread(target=run_server, name="WebServerThread", daemon=True)
+        server_thread.start()
+        logger.info("REST API Server started in background thread from bot.py")
+    except Exception as e:
+        logger.error(f"Failed to start REST API Server in background: {e}")
     start_bot_polling()
