@@ -30,8 +30,7 @@ def main():
 
     # Start API Web Server in main thread
     try:
-        print(f"🌐 بدء تشغيل خادم الـ API على المنفذ {API_PORT}...")
-        run_server(host=API_HOST, port=API_PORT)
+        run_server(host=API_HOST, port=API_PORT, handle_signals=True)
     except KeyboardInterrupt:
         print("\n🛑 تم إيقاف السيرفر والبوت بنجاح.")
         sys.exit(0)
