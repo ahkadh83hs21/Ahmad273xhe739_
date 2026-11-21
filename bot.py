@@ -654,7 +654,16 @@ def handle_callbacks(call):
         bot.answer_callback_query(call.id)
         return
 
-    # Delete Category
+    # Delete Category Confirmation (Must come before cat_del_)
+    if data.startswith("cat_del_confirm_"):
+        cid = data[len("cat_del_confirm_"):]
+        ok, res = db.delete_category(cid, delete_channels=True)
+        bot.answer_callback_query(call.id, "تم حذف القسم وقنواته بنجاح 🗑️", show_alert=True)
+        text, kb = render_categories_page(page=1)
+        bot.edit_message_text(text, chat_id, msg_id, reply_markup=kb)
+        return
+
+    # Delete Category Prompt
     if data.startswith("cat_del_"):
         cid = data[len("cat_del_"):]
         c = db.get_category(cid)
@@ -670,14 +679,6 @@ def handle_callbacks(call):
         )
         bot.edit_message_text(text, chat_id, msg_id, reply_markup=kb)
         bot.answer_callback_query(call.id)
-        return
-
-    if data.startswith("cat_del_confirm_"):
-        cid = data[len("cat_del_confirm_"):]
-        db.delete_category(cid, delete_channels=True)
-        bot.answer_callback_query(call.id, "تم حذف القسم وقنواته بنجاح 🗑️", show_alert=True)
-        text, kb = render_categories_page(page=1)
-        bot.edit_message_text(text, chat_id, msg_id, reply_markup=kb)
         return
 
 # ----------------- Message Handler for Wizards -----------------

@@ -103,11 +103,23 @@ def sanitize_url(u):
     if not u or not isinstance(u, str):
         return u
     u = u.strip()
+    if not u:
+        return ""
+    if "/static/uploads/" in u:
+        fn = u.split("/static/uploads/", 1)[1]
+        return f"{PUBLIC_URL}/static/uploads/{fn}"
+    if "/uploads/" in u:
+        fn = u.split("/uploads/", 1)[1]
+        return f"{PUBLIC_URL}/static/uploads/{fn}"
+    if u.startswith("/static/"):
+        return f"{PUBLIC_URL}{u}"
     if u.startswith("http://0.0.0.0:8080") or u.startswith("http://127.0.0.1:8080"):
         part = u.split(":8080", 1)[1]
         return f"{PUBLIC_URL}{part}"
-    if u.startswith("/static/") or u.startswith("/uploads/"):
-        return f"{PUBLIC_URL}{u}"
+    for old_host in ["maj83bd-production.up.railway.app"]:
+        if old_host in u:
+            part = u.split(old_host, 1)[1]
+            return f"{PUBLIC_URL}{part}"
     return u
 
 def sanitize_notif(n):
