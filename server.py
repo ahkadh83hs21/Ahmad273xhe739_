@@ -481,14 +481,69 @@ async def handle_admin_stats(request):
     fcm_count = db.get_fcm_devices_count()
     maint = db.get_maintenance()
     update = db.get_app_update()
+    vod = db.get_vod_all()
     return json_ar({
         "status": "success",
         "stats": stats,
         "fcm_devices": fcm_count,
         "firebase_configured": is_firebase_configured(),
         "maintenance": maint,
-        "update": update
+        "update": update,
+        "movies_count": len(vod.get("movies", [])),
+        "series_count": len(vod.get("series", []))
     })
+
+# ----------------- مسارات الأفلام والمسلسلات (VOD APIs) -----------------
+async def handle_vod_all(request):
+    """جلب كافة الأفلام والمسلسلات والمحتوى المميز"""
+    vod = db.get_vod_all()
+    return json_ar({
+        "status": "success",
+        "movies": vod.get("movies", []),
+        "series": vod.get("series", [])
+    })
+
+async def handle_vod_movies(request):
+    """جلب الأفلام مع إمكانية الفلترة حسب القسم"""
+    cat = request.query.get("category", "").strip()
+    movies = db.get_movies(category=cat if cat else None)
+    return json_ar({"status": "success", "movies": movies, "count": len(movies)})
+
+async def handle_vod_series(request):
+    """جلب المسلسلات مع إمكانية الفلترة حسب القسم"""
+    cat = request.query.get("category", "").strip()
+    series = db.get_series(category=cat if cat else None)
+    return json_ar({"status": "success", "series": series, "count": len(series)})
+
+async def handle_admin_vod_add(request):
+    """إضافة فيلم أو مسلسل جديد من لوحة تحكم المشرف"""
+    if not is_admin_request(request):
+        return json_ar({"status": "error", "message": "غير مصرح به - مفتاح المشرف مطلوب"}, status=401)
+    try:
+        data = await request.json()
+        item_type = data.get("type", "movie")
+        if item_type == "movie":
+            added = db.add_movie(data)
+        else:
+            added = db.add_series(data)
+        return json_ar({"status": "success", "item": added, "message": "تمت إضافة العمل بنجاح"})
+    except Exception as e:
+        return json_ar({"status": "error", "message": str(e)}, status=400)
+
+async def handle_admin_vod_delete(request):
+    """حذف فيلم أو مسلسل من لوحة المشرف"""
+    if not is_admin_request(request):
+        return json_ar({"status": "error", "message": "غير مصرح به - مفتاح المشرف مطلوب"}, status=401)
+    try:
+        data = await request.json()
+        item_id = data.get("id")
+        item_type = data.get("type", "movie")
+        if not item_id:
+            return json_ar({"status": "error", "message": "مطلوب معرف العمل id"}, status=400)
+        db.delete_vod_item(item_id, item_type)
+        return json_ar({"status": "success", "message": "تم حذف العمل بنجاح"})
+    except Exception as e:
+        return json_ar({"status": "error", "message": str(e)}, status=400)
 
 def make_app():
     app = web.Application(middlewares=[cors_middleware, maintenance_middleware])
@@ -547,6 +602,18 @@ def make_app():
     app.router.add_post("/api/admin/category/add/", handle_admin_add_category)
     app.router.add_get("/api/admin/stats", handle_admin_stats)
     app.router.add_get("/api/admin/stats/", handle_admin_stats)
+
+    # VOD (Movies & Series) APIs
+    app.router.add_get("/api/vod/all", handle_vod_all)
+    app.router.add_get("/api/vod/all/", handle_vod_all)
+    app.router.add_get("/api/vod/movies", handle_vod_movies)
+    app.router.add_get("/api/vod/movies/", handle_vod_movies)
+    app.router.add_get("/api/vod/series", handle_vod_series)
+    app.router.add_get("/api/vod/series/", handle_vod_series)
+    app.router.add_post("/api/admin/vod/add", handle_admin_vod_add)
+    app.router.add_post("/api/admin/vod/add/", handle_admin_vod_add)
+    app.router.add_post("/api/admin/vod/delete", handle_admin_vod_delete)
+    app.router.add_post("/api/admin/vod/delete/", handle_admin_vod_delete)
 
     uploads_dir = os.path.join(os.path.dirname(__file__), "data", "uploads")
     os.makedirs(uploads_dir, exist_ok=True)

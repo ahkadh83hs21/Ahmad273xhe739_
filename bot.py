@@ -63,12 +63,14 @@ def back_keyboard(callback_target="main_menu"):
 
 def main_dashboard_keyboard(user_id=None):
     """
-    Clean, focused keyboard with the 4 essential operations:
+    Clean, focused keyboard with the essential operations:
     - إضافة قسم
     - إضافة قناة داخل قسم
     - تعديل قناة داخل قسم
     - مسح قناة داخل قسم
     - عرض وإدارة الأقسام
+    - وضع الصيانة
+    - تحديث التطبيق APK
     """
     kb = types.InlineKeyboardMarkup(row_width=2)
     b_add_cat = types.InlineKeyboardButton("➕ إضافة قسم", callback_data="btn_add_cat")
@@ -76,27 +78,116 @@ def main_dashboard_keyboard(user_id=None):
     b_edit_ch = types.InlineKeyboardButton("✏️ تعديل قناة داخل قسم", callback_data="btn_edit_ch_select")
     b_del_ch = types.InlineKeyboardButton("🗑️ مسح قناة داخل قسم", callback_data="btn_del_ch_select")
     b_browse = types.InlineKeyboardButton("🗂️ عرض وإدارة الأقسام والقنوات", callback_data="cat_p_1")
+    b_maint = types.InlineKeyboardButton("🛠️ وضع الصيانة", callback_data="menu_maintenance")
+    b_update = types.InlineKeyboardButton("🚀 تحديث التطبيق APK", callback_data="menu_app_update")
 
     kb.row(b_add_cat)
     kb.row(b_add_ch)
     kb.row(b_edit_ch, b_del_ch)
     kb.row(b_browse)
+    kb.row(b_maint, b_update)
     return kb
+
+def render_maintenance_menu():
+    m = db.get_maintenance()
+    enabled = m.get("enabled", False)
+    status_str = "🟢 مفعّل (التطبيق في وضع الصيانة)" if enabled else "🔴 معطل (التطبيق يعمل بشكل طبيعي)"
+    msg = m.get("message", "نعتذر منكم، التطبيق تحت الصيانة حالياً لتحسين الخدمة. يرجى المحاولة لاحقاً، وشكراً لصبركم.")
+    duration = m.get("duration", "مفتوحة حتى إيقافها يدوياً")
+    updated = m.get("updated_at", "غير محدد")
+
+    text = (
+        "🛠️ <b>لوحة إدارة وضع الصيانة</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"• <b>الحالة:</b> {status_str}\n"
+        f"• <b>المدة المحددة:</b> {duration}\n"
+        f"• <b>آخر تحديث:</b> {updated}\n\n"
+        f"• <b>رسالة الصيانة المعروضة للمستخدمين:</b>\n"
+        f"<i>«{msg}»</i>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "اختر الإجراء المطلوب أدناه:"
+    )
+
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    if enabled:
+        kb.row(types.InlineKeyboardButton("🔴 إيقاف وضع الصيانة فوراً", callback_data="maint_toggle_off"))
+    else:
+        kb.row(types.InlineKeyboardButton("🟢 تفعيل وضع الصيانة الآن", callback_data="maint_toggle_on"))
+
+    kb.row(
+        types.InlineKeyboardButton("✏️ تعديل رسالة الصيانة", callback_data="maint_edit_msg"),
+        types.InlineKeyboardButton("⏱️ تحديد مدة الصيانة", callback_data="maint_edit_dur")
+    )
+    kb.row(types.InlineKeyboardButton("🏠 العودة للقائمة الرئيسية", callback_data="main_menu"))
+    return text, kb
+
+def render_app_update_menu():
+    u = db.get_app_update()
+    enabled = u.get("enabled", False)
+    status_str = "🟢 مفعّل (تظهر نافذة التحديث في التطبيق)" if enabled else "🔴 معطل (لا تظهر نافذة التحديث)"
+    v_name = u.get("version_name", "1.1")
+    v_code = u.get("version_code", 2)
+    dl_url = u.get("download_url", "")
+    notes = u.get("release_notes", "🎉 يتوفر الآن تحديث جديد للتطبيق!\nقم بتحديث تطبيقك للحصول على أحدث التحسينات والإصلاحات والمميزات الجديدة.\nاضغط على زر تحديث الآن للحصول على أحدث إصدار.")
+    is_force = u.get("is_force", False)
+    force_str = "⚠️ إجباري (يمنع استخدام التطبيق القديم)" if is_force else "ℹ️ اختياري (يمكن للمستخدم تخطيه)"
+    updated = u.get("updated_at", "غير محدد")
+
+    url_display = f"<code>{dl_url}</code>" if dl_url else "<i>لم يتم تحديد رابط تحميل بعد (أرسل الرابط بالضغط على الزر أدناه)</i>"
+
+    text = (
+        "🚀 <b>لوحة إدارة تحديثات التطبيق (APK Update)</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"• <b>حالة التحديث:</b> {status_str}\n"
+        f"• <b>رقم الإصدار الجديد:</b> <code>{v_name}</code> (كود: <code>{v_code}</code>)\n"
+        f"• <b>نوع التحديث:</b> {force_str}\n"
+        f"• <b>آخر تحديث:</b> {updated}\n\n"
+        f"• <b>رابط التحميل المباشر للـ APK:</b>\n{url_display}\n\n"
+        f"• <b>رسالة التحديث للمستخدمين:</b>\n<i>«{notes}»</i>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "اختر الإجراء المطلوب أدناه:"
+    )
+
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    if enabled:
+        kb.row(types.InlineKeyboardButton("🔴 إيقاف إشعار التحديث", callback_data="update_toggle_off"))
+    else:
+        kb.row(types.InlineKeyboardButton("🟢 تفعيل إشعار التحديث", callback_data="update_toggle_on"))
+
+    kb.row(
+        types.InlineKeyboardButton("🔗 تعديل رابط APK", callback_data="update_edit_url"),
+        types.InlineKeyboardButton("🔢 تعديل رقم الإصدار", callback_data="update_edit_version")
+    )
+    kb.row(
+        types.InlineKeyboardButton("📝 تعديل رسالة وملاحظات التحديث", callback_data="update_edit_notes"),
+        types.InlineKeyboardButton("⚠️ تبديل (إجباري / اختياري)", callback_data="update_toggle_force")
+    )
+    kb.row(types.InlineKeyboardButton("📢 إرسال إشعار فوري بالتحديث", callback_data="update_broadcast"))
+    kb.row(types.InlineKeyboardButton("🏠 العودة للقائمة الرئيسية", callback_data="main_menu"))
+    return text, kb
 
 def render_welcome_text():
     cats = db.get_categories()
     chs = db.get_channels()
+    m = db.get_maintenance()
+    maint_status = "🛠️ وضع الصيانة: 🟢 مفعّل" if m.get("enabled") else "🛠️ وضع الصيانة: 🔴 معطل"
+    u = db.get_app_update()
+    up_status = f"🚀 التحديث: 🟢 مفعّل (v{u.get('version_name', '1.1')})" if u.get("enabled") else "🚀 التحديث: 🔴 معطل"
+
     return (
         "👋 <b>أهلاً بك في لوحة تحكم تطبيق أحمد ال علي TV</b> 🚀\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📊 الإحصائيات: <b>{len(cats)}</b> باقة وقسم | <b>{len(chs)}</b> قناة مباشرة\n"
+        f"⚙️ الحالة: {maint_status} | {up_status}\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "اختر الإجراء المطلوب من الأزرار أدناه:\n\n"
         "➕ <b>إضافة قسم:</b> إنشاء قسم جديد مع اسمه وشعاره.\n"
         "📺 <b>إضافة قناة داخل قسم:</b> اسم، شعار، ورابط البث.\n"
         "✏️ <b>تعديل قناة داخل قسم:</b> تعديل الاسم أو الشعار أو الرابط.\n"
         "🗑️ <b>مسح قناة داخل قسم:</b> حذف القناة نهائياً من التطبيق.\n"
-        "🗂️ <b>عرض وإدارة الأقسام:</b> استعراض كافة الأقسام وقنواتها.\n\n"
+        "🗂️ <b>عرض وإدارة الأقسام:</b> استعراض كافة الأقسام وقنواتها.\n"
+        "🛠️ <b>وضع الصيانة:</b> تفعيل/إيقاف وتعديل رسالة الصيانة والمدة.\n"
+        "🚀 <b>تحديث التطبيق APK:</b> إدارة روابط وإصدارات التحديث للمستخدمين.\n\n"
         "⚡ <i>ملاحظة: أي قسم جديد تضيفه سيظهر أول شيء في التطبيق تلقائياً!</i>"
     )
 
@@ -328,6 +419,137 @@ def handle_callbacks(call):
         except Exception:
             bot.send_message(chat_id, render_welcome_text(), reply_markup=main_dashboard_keyboard(user_id))
         bot.answer_callback_query(call.id)
+        return
+
+    # Maintenance Mode Menu
+    if data == "menu_maintenance":
+        user_states.pop(user_id, None)
+        text, kb = render_maintenance_menu()
+        bot.edit_message_text(text, chat_id, msg_id, reply_markup=kb)
+        bot.answer_callback_query(call.id)
+        return
+
+    if data == "maint_toggle_on":
+        db.set_maintenance(True, admin_id=user_id)
+        text, kb = render_maintenance_menu()
+        bot.edit_message_text(text, chat_id, msg_id, reply_markup=kb)
+        bot.answer_callback_query(call.id, "✅ تم تفعيل وضع الصيانة بنجاح!", show_alert=True)
+        return
+
+    if data == "maint_toggle_off":
+        db.set_maintenance(False, admin_id=user_id)
+        text, kb = render_maintenance_menu()
+        bot.edit_message_text(text, chat_id, msg_id, reply_markup=kb)
+        bot.answer_callback_query(call.id, "✅ تم إيقاف وضع الصيانة، التطبيق يعمل الآن بشكل طبيعي!", show_alert=True)
+        return
+
+    if data == "maint_edit_msg":
+        user_states[user_id] = {"action": "wait_maint_msg"}
+        prompt = (
+            "✏️ <b>تعديل رسالة الصيانة</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "أرسل الآن الرسالة الجديدة التي تريد أن تظهر للمستخدمين عند فتح التطبيق.\n\n"
+            "<i>رسالة مقترحة:</i>\n"
+            "<code>نعتذر منكم، التطبيق تحت الصيانة حالياً لتحسين الخدمة. يرجى المحاولة لاحقاً، وشكراً لصبركم.</code>"
+        )
+        bot.edit_message_text(prompt, chat_id, msg_id, reply_markup=cancel_keyboard())
+        bot.answer_callback_query(call.id)
+        return
+
+    if data == "maint_edit_dur":
+        user_states[user_id] = {"action": "wait_maint_duration"}
+        prompt = (
+            "⏱️ <b>تحديد مدة الصيانة</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "أرسل نص المدة المتوقعة للصيانة (مثال: <code>ساعتان</code> أو <code>حتى 10:00 مساءً</code> أو <code>صيانة دورية</code> أو <code>مفتوحة حتى إيقافها يدوياً</code>):"
+        )
+        bot.edit_message_text(prompt, chat_id, msg_id, reply_markup=cancel_keyboard())
+        bot.answer_callback_query(call.id)
+        return
+
+    # App Update Menu
+    if data == "menu_app_update":
+        user_states.pop(user_id, None)
+        text, kb = render_app_update_menu()
+        bot.edit_message_text(text, chat_id, msg_id, reply_markup=kb)
+        bot.answer_callback_query(call.id)
+        return
+
+    if data == "update_toggle_on":
+        db.toggle_app_update(True)
+        text, kb = render_app_update_menu()
+        bot.edit_message_text(text, chat_id, msg_id, reply_markup=kb)
+        bot.answer_callback_query(call.id, "✅ تم تفعيل إشعار التحديث في التطبيق!", show_alert=True)
+        return
+
+    if data == "update_toggle_off":
+        db.toggle_app_update(False)
+        text, kb = render_app_update_menu()
+        bot.edit_message_text(text, chat_id, msg_id, reply_markup=kb)
+        bot.answer_callback_query(call.id, "✅ تم إيقاف إشعار التحديث!", show_alert=True)
+        return
+
+    if data == "update_toggle_force":
+        u = db.get_app_update()
+        new_force = not u.get("is_force", False)
+        db.update_app_update_field(is_force=new_force)
+        text, kb = render_app_update_menu()
+        bot.edit_message_text(text, chat_id, msg_id, reply_markup=kb)
+        f_text = "إجباري ⚠️" if new_force else "اختياري ℹ️"
+        bot.answer_callback_query(call.id, f"✅ تم تغيير نوع التحديث إلى: {f_text}")
+        return
+
+    if data == "update_edit_url":
+        user_states[user_id] = {"action": "wait_update_url"}
+        prompt = (
+            "🔗 <b>تعديل رابط تحميل APK</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "أرسل الآن الرابط المباشر لملف APK الجديد (مثال: https://.../app.apk أو رابط Google Drive / Mediafire / Dropbox):\n\n"
+            "💡 <i>يمكنك أيضاً إرسال ملف الـ APK مباشرة إلى المحادثة وسيقوم البوت بربطه تلقائياً!</i>"
+        )
+        bot.edit_message_text(prompt, chat_id, msg_id, reply_markup=cancel_keyboard())
+        bot.answer_callback_query(call.id)
+        return
+
+    if data == "update_edit_version":
+        user_states[user_id] = {"action": "wait_update_version"}
+        prompt = (
+            "🔢 <b>تعديل رقم الإصدار</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "أرسل رقم الإصدار الجديد (مثال: <code>1.2</code> أو <code>2.0</code>):\n\n"
+            "💡 <i>سيقوم البوت تلقائياً بتحديث كود الإصدار (versionCode) لضمان ظهوره لكافة المستخدمين.</i>"
+        )
+        bot.edit_message_text(prompt, chat_id, msg_id, reply_markup=cancel_keyboard())
+        bot.answer_callback_query(call.id)
+        return
+
+    if data == "update_edit_notes":
+        user_states[user_id] = {"action": "wait_update_notes"}
+        prompt = (
+            "📝 <b>تعديل رسالة وملاحظات التحديث</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "أرسل نص الرسالة والمميزات الجديدة التي تريد إظهارها للمستخدمين.\n\n"
+            "<i>نص مقترح:</i>\n"
+            "<code>🎉 يتوفر الآن تحديث جديد للتطبيق!\nقم بتحديث تطبيقك للحصول على أحدث التحسينات والإصلاحات والمميزات الجديدة.\nاضغط على زر تحديث الآن للحصول على أحدث إصدار.</code>"
+        )
+        bot.edit_message_text(prompt, chat_id, msg_id, reply_markup=cancel_keyboard())
+        bot.answer_callback_query(call.id)
+        return
+
+    if data == "update_broadcast":
+        u = db.get_app_update()
+        v_name = u.get("version_name", "1.1")
+        notif = {
+            "title": "🎉 يتوفر تحديث جديد للتطبيق!",
+            "message": f"تم إطلاق الإصدار {v_name} مع تحسينات وسرعة تشغيل عالية. يرجى التحديث الآن للحصول على أفضل تجربة.",
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        with db._lock:
+            raw_d = db._load_raw()
+            raw_d["notification"] = notif
+            db._save_raw(raw_d)
+        
+        bot.answer_callback_query(call.id, "✅ تم إرسال وتفعيل إشعار التحديث في قاعدة البيانات بنجاح!", show_alert=True)
         return
 
     if data == "noop":
@@ -1023,6 +1245,70 @@ def handle_text_messages(message):
         kb.add(types.InlineKeyboardButton("📺 عرض تفاصيل القناة", callback_data=f"ch_view_{chid}"))
         kb.add(types.InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="main_menu"))
         bot.reply_to(message, "✅ <b>تم تحديث شعار القناة بنجاح!</b>", reply_markup=kb)
+        return
+
+    # 5. Maintenance Mode Wizards
+    if action == "wait_maint_msg":
+        user_states.pop(user_id, None)
+        m = db.get_maintenance()
+        db.set_maintenance(m.get("enabled", False), message=raw_text, admin_id=user_id)
+        kb = types.InlineKeyboardMarkup()
+        kb.add(types.InlineKeyboardButton("🛠️ العودة لقائمة الصيانة", callback_data="menu_maintenance"))
+        kb.add(types.InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="main_menu"))
+        bot.reply_to(message, f"✅ <b>تم تحديث رسالة الصيانة بنجاح!</b>\n\n<i>«{raw_text}»</i>", reply_markup=kb)
+        return
+
+    if action == "wait_maint_duration":
+        user_states.pop(user_id, None)
+        m = db.get_maintenance()
+        db.set_maintenance(m.get("enabled", False), duration=raw_text, admin_id=user_id)
+        kb = types.InlineKeyboardMarkup()
+        kb.add(types.InlineKeyboardButton("🛠️ العودة لقائمة الصيانة", callback_data="menu_maintenance"))
+        kb.add(types.InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="main_menu"))
+        bot.reply_to(message, f"✅ <b>تم تحديد مدة الصيانة بنجاح:</b> <code>{raw_text}</code>", reply_markup=kb)
+        return
+
+    # 6. App Update Wizards
+    if action == "wait_update_url":
+        user_states.pop(user_id, None)
+        url_val = raw_text
+        if not (url_val.startswith("http://") or url_val.startswith("https://")):
+            bot.reply_to(message, "⚠️ يرجى إرسال رابط صحيح يبدأ بـ http:// أو https://")
+            return
+        db.update_app_update_field(download_url=url_val, enabled=True)
+        kb = types.InlineKeyboardMarkup()
+        kb.add(types.InlineKeyboardButton("🚀 العودة لقائمة التحديث", callback_data="menu_app_update"))
+        kb.add(types.InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="main_menu"))
+        bot.reply_to(message, f"✅ <b>تم حفظ وتفعيل رابط الـ APK بنجاح!</b>\n🔗 الرابط:\n<code>{url_val}</code>", reply_markup=kb)
+        return
+
+    if action == "wait_update_version":
+        user_states.pop(user_id, None)
+        u = db.get_app_update()
+        cur_code = u.get("version_code", 1)
+        v_name = raw_text
+        v_code = cur_code + 1
+        if ":" in raw_text:
+            parts = raw_text.split(":")
+            v_name = parts[0].strip()
+            try:
+                v_code = int(parts[1].strip())
+            except Exception:
+                pass
+        db.update_app_update_field(version_name=v_name, version_code=v_code)
+        kb = types.InlineKeyboardMarkup()
+        kb.add(types.InlineKeyboardButton("🚀 العودة لقائمة التحديث", callback_data="menu_app_update"))
+        kb.add(types.InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="main_menu"))
+        bot.reply_to(message, f"✅ <b>تم تحديث الإصدار بنجاح!</b>\n• رقم الإصدار (VersionName): <code>{v_name}</code>\n• كود الإصدار (VersionCode): <code>{v_code}</code>", reply_markup=kb)
+        return
+
+    if action == "wait_update_notes":
+        user_states.pop(user_id, None)
+        db.update_app_update_field(release_notes=raw_text)
+        kb = types.InlineKeyboardMarkup()
+        kb.add(types.InlineKeyboardButton("🚀 العودة لقائمة التحديث", callback_data="menu_app_update"))
+        kb.add(types.InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="main_menu"))
+        bot.reply_to(message, f"✅ <b>تم حفظ رسالة وملاحظات التحديث بنجاح!</b>\n\n<i>«{raw_text}»</i>", reply_markup=kb)
         return
 
 def start_bot_polling():

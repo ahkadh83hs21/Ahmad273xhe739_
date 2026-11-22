@@ -1692,14 +1692,15 @@ class Database:
             m = data.get("maintenance", {})
             return {
                 "enabled": m.get("enabled", False),
-                "message": m.get("message", "التطبيق تحت الصيانة حالياً، نعمل على تحسين تجربتك. يرجى المحاولة لاحقاً"),
+                "message": m.get("message", "نعتذر منكم، التطبيق تحت الصيانة حالياً لتحسين الخدمة. يرجى المحاولة لاحقاً، وشكراً لصبركم."),
+                "duration": m.get("duration", "مفتوحة حتى إيقافها يدوياً"),
                 "image": m.get("image", ""),
                 "bg_color": m.get("bg_color", "#0F0A18"),
                 "theme": m.get("theme", "dark_purple"),
                 "updated_at": m.get("updated_at", "")
             }
 
-    def set_maintenance(self, enabled: bool, message=None, image=None, bg_color=None, theme=None, admin_id=None):
+    def set_maintenance(self, enabled: bool, message=None, duration=None, image=None, bg_color=None, theme=None, admin_id=None):
         with _lock:
             data = self._load_raw()
             m = data.setdefault("maintenance", {})
@@ -1707,7 +1708,9 @@ class Database:
             if message is not None and str(message).strip():
                 m["message"] = str(message).strip()
             elif not m.get("message") or not m["message"].strip():
-                m["message"] = "التطبيق تحت الصيانة حالياً، نعمل على تحسين تجربتك. يرجى المحاولة لاحقاً"
+                m["message"] = "نعتذر منكم، التطبيق تحت الصيانة حالياً لتحسين الخدمة. يرجى المحاولة لاحقاً، وشكراً لصبركم."
+            if duration is not None:
+                m["duration"] = str(duration).strip()
             if image is not None:
                 m["image"] = str(image).strip()
             if bg_color is not None and str(bg_color).strip():
@@ -1722,7 +1725,7 @@ class Database:
             # Verification: Re-read directly from disk
             saved_m = self._load_raw().get("maintenance", {})
             if saved_m.get("enabled") == bool(enabled):
-                logger.info("Maintenance state updated to %s (message: %s, image: %s, bg: %s) by admin %s", enabled, m.get("message"), m.get("image"), m.get("bg_color"), admin_id)
+                logger.info("Maintenance state updated to %s (message: %s, duration: %s) by admin %s", enabled, m.get("message"), m.get("duration"), admin_id)
                 return True, saved_m
             logger.error("Maintenance persistence verification failed for admin %s", admin_id)
             return False, "فشل حفظ حالة الصيانة في قاعدة البيانات"
@@ -1760,6 +1763,17 @@ class Database:
             data = self._load_raw()
             up = data.setdefault("app_update", {})
             up["enabled"] = bool(enabled)
+            up["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self._save_raw(data)
+            return up
+
+    def update_app_update_field(self, **kwargs):
+        with _lock:
+            data = self._load_raw()
+            up = data.setdefault("app_update", {})
+            for k, v in kwargs.items():
+                if v is not None:
+                    up[k] = v
             up["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self._save_raw(data)
             return up
@@ -1974,6 +1988,62 @@ class Database:
                 self._save_raw(data)
                 logger.info("Removed %d invalid FCM tokens from DB", removed)
             return removed
+
+    # ---------------- VOD (Movies & Series) APIs ----------------
+    def get_movies(self, category=None):
+        with _lock:
+            data = self._load_raw()
+            movies = data.get("movies", [])
+            if category and category != "all":
+                return [m for m in movies if m.get("category") == category]
+            return movies
+
+    def get_series(self, category=None):
+        with _lock:
+            data = self._load_raw()
+            series = data.get("series", [])
+            if category and category != "all":
+                return [s for s in series if s.get("category") == category]
+            return series
+
+    def get_vod_all(self):
+        with _lock:
+            data = self._load_raw()
+            return {
+                "movies": data.get("movies", []),
+                "series": data.get("series", [])
+            }
+
+    def add_movie(self, movie_dict):
+        with _lock:
+            data = self._load_raw()
+            if "movies" not in data:
+                data["movies"] = []
+            if not movie_dict.get("id"):
+                movie_dict["id"] = f"mov_{int(datetime.now().timestamp())}"
+            data["movies"].append(movie_dict)
+            self._save_raw(data)
+            return movie_dict
+
+    def add_series(self, series_dict):
+        with _lock:
+            data = self._load_raw()
+            if "series" not in data:
+                data["series"] = []
+            if not series_dict.get("id"):
+                series_dict["id"] = f"ser_{int(datetime.now().timestamp())}"
+            data["series"].append(series_dict)
+            self._save_raw(data)
+            return series_dict
+
+    def delete_vod_item(self, item_id, item_type="movie"):
+        with _lock:
+            data = self._load_raw()
+            key = "movies" if item_type == "movie" else "series"
+            items = data.get(key, [])
+            data[key] = [item for item in items if item.get("id") != item_id]
+            self._save_raw(data)
+            return True
 
 # Global Database Instance
 db = Database()
